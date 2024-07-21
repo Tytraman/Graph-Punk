@@ -5,7 +5,10 @@ use sdl2::video::GLContext;
 use vbo::VBO;
 
 use crate::{
-    maths::vec::Vec3,
+    maths::{
+        mat::Mat4,
+        vec::{Vec2, Vec3},
+    },
     shader::{Shader, ShaderProgram, ShaderType},
     shapes::rectangle::Rectangle,
 };
@@ -39,48 +42,12 @@ impl RendererManager {
         }))
     }
 
-    pub fn borrow_mut_renderer(&mut self, name: &str) -> Option<&mut Renderer> {
-        self.renderers.get_mut(name)
-    }
+    pub fn init_resources(&mut self, renderer_name: &str) -> Result<(), String> {
+        let renderer = match self.renderers.get_mut(renderer_name) {
+            Some(r) => r,
+            None => return Err("no renderer found".to_string()),
+        };
 
-    pub fn add_renderer(&mut self, name: &str, renderer: Renderer) {
-        let _ = self.renderers.insert(name.to_string(), renderer);
-    }
-
-    pub fn get_number_of_renderers(&self) -> usize {
-        self.renderers.len()
-    }
-}
-
-pub trait Draw {
-    fn draw(&self) -> Result<(), String>;
-
-    fn get_position(&self) -> Vec3<f32>;
-    fn set_position(&mut self, position: Vec3<f32>);
-
-    fn get_scale(&self) -> Vec3<f32>;
-    fn set_scale(&mut self, scale: Vec3<f32>);
-
-    fn is_visible(&self) -> bool;
-    fn set_visible(&mut self, value: bool);
-}
-
-pub struct Renderer {
-    context: GLContext,
-    vbos: HashMap<usize, VBO>,
-    drawing_objects: Vec<Box<dyn Draw>>,
-}
-
-impl Renderer {
-    pub fn new(context: GLContext) -> Self {
-        Self {
-            context,
-            vbos: HashMap::new(),
-            drawing_objects: Vec::new(),
-        }
-    }
-
-    pub fn init_resources(&mut self) -> Result<(), String> {
         let shader_filename = "Builtin/Shaders/basic_2D_vertex_shader.glsl";
         let vertex_shader = match fs::read_to_string(shader_filename) {
             Ok(t) => t,
@@ -144,21 +111,17 @@ impl Renderer {
             return Err(err);
         }
 
-        let chip_width = 64.0_f32;
-        let chip_height = 32.0_f32;
-
-        let mut x = -1.0_f32 + ((2.0_f32 / chip_width) / 2.0_f32);
-        let mut y = 1.0_f32 - ((2.0_f32 / chip_height) / 2.0_f32);
-
-        let x_origin = x;
-
         let rect = match Rectangle::build(
-            self,
+            renderer,
             program,
-            Vec3 { x, y, z: 0.0_f32 },
             Vec3 {
-                x: 2.0_f32 / chip_width,
-                y: 2.0_f32 / chip_height,
+                x: 0.0_f32,
+                y: 0.0_f32,
+                z: 0.0_f32,
+            },
+            Vec3 {
+                x: 1.0_f32,
+                y: 1.0_f32,
                 z: 1.0_f32,
             },
         ) {
@@ -166,20 +129,80 @@ impl Renderer {
             Err(err) => return Err(err),
         };
 
-        for _ in 0..32 {
-            for _ in 0..64 {
+        for y in 0..32 {
+            for x in 0..64 {
                 let mut rect_clone = rect.clone();
-                rect_clone.set_position(Vec3 { x, y, z: 0.0_f32 });
+                rect_clone.set_position(Vec3 {
+                    x: x as f32,
+                    y: y as f32,
+                    z: 0.0_f32,
+                });
                 rect_clone.set_visible(false);
 
-                self.drawing_objects.push(Box::new(rect_clone));
-                x += 2.0_f32 / chip_width;
+                renderer.drawing_objects.push(Box::new(rect_clone));
             }
-            x = x_origin;
-            y -= 2.0_f32 / chip_height;
         }
 
         Ok(())
+    }
+
+    pub fn borrow_mut_renderer(&mut self, name: &str) -> Option<&mut Renderer> {
+        self.renderers.get_mut(name)
+    }
+
+    pub fn add_renderer(&mut self, name: &str, renderer: Renderer) {
+        let _ = self.renderers.insert(name.to_string(), renderer);
+    }
+
+    pub fn get_number_of_renderers(&self) -> usize {
+        self.renderers.len()
+    }
+}
+
+pub trait Draw {
+    fn draw(&self, renderer: &Renderer, projection: &Mat4<f32>) -> Result<(), String>;
+
+    fn get_position(&self) -> Vec3<f32>;
+    fn set_position(&mut self, position: Vec3<f32>);
+
+    fn get_scale(&self) -> Vec3<f32>;
+    fn set_scale(&mut self, scale: Vec3<f32>);
+
+    fn is_visible(&self) -> bool;
+    fn set_visible(&mut self, value: bool);
+}
+
+pub struct Renderer {
+    context: GLContext,
+    vbos: HashMap<usize, VBO>,
+    drawing_objects: Vec<Box<dyn Draw>>,
+    display_size: Vec2<i32>,
+    pub(crate) aspect_ratio: f32,
+    pub(crate) left: f32,
+    pub(crate) bottom: f32,
+    pub(crate) projection: Mat4<f32>,
+}
+
+impl Renderer {
+    pub fn new(context: GLContext, display_size: Vec2<i32>) -> Self {
+        Self {
+            context,
+            vbos: HashMap::new(),
+            drawing_objects: Vec::new(),
+            display_size,
+            aspect_ratio: 1.0_f32,
+            left: 0.0_f32,
+            bottom: 0.0_f32,
+            projection: Mat4::new(),
+        }
+    }
+
+    pub fn set_display_size(&mut self, display_size: Vec2<i32>) {
+        self.display_size = display_size;
+    }
+
+    pub fn get_display_size(&self) -> Vec2<i32> {
+        self.display_size.clone()
     }
 
     pub fn get_pixel(&mut self, x: usize, y: usize) -> Result<&mut Box<dyn Draw>, String> {

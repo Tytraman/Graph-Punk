@@ -7,13 +7,13 @@ use sdl2::{
     EventPump, Sdl,
 };
 
-use crate::renderer::check_errors;
-use crate::renderer::clear_errors;
 use crate::{
     gl_exec,
     renderer::{Renderer, RendererManager},
     types::{UserData, RGB},
 };
+use crate::{maths::mat::Mat4, renderer::check_errors};
+use crate::{maths::vec::Vec2, renderer::clear_errors};
 
 use super::user_input::{KeyStatus, Keys};
 
@@ -33,6 +33,7 @@ impl<'a> Window<'a> {
         title: &str,
         width: u32,
         height: u32,
+        display_size: Vec2<i32>,
         renderer_manager: &mut RendererManager,
     ) -> Result<Self, String> {
         let sdl = sdl2::init()?;
@@ -69,14 +70,14 @@ impl<'a> Window<'a> {
             video_subsystem.gl_get_proc_address(proc_name) as *const std::os::raw::c_void
         });
 
-        let renderer = Renderer::new(gl_context);
+        let renderer_name = renderer_manager.get_number_of_renderers().to_string();
+
+        let renderer = Renderer::new(gl_context, display_size);
         if let Err(err) = renderer.set_viewport_size(width as i32, height as i32) {
             return Err(err);
         }
 
         unsafe { SDL_GL_SetSwapInterval(0) };
-
-        let renderer_name = renderer_manager.get_number_of_renderers().to_string();
 
         renderer_manager.add_renderer(&renderer_name, renderer);
 
@@ -212,6 +213,50 @@ impl<'a> Window<'a> {
                             if let Err(err) = renderer.set_viewport_size(width, height) {
                                 eprintln!("{err}");
                             }
+
+                            let display_size = renderer.get_display_size();
+                            let display_aspect_ratio =
+                                display_size.x as f32 / display_size.y as f32;
+
+                            // Le rapport d'aspect permet d'agrandir / réduire le rendu afin de
+                            // remplir l'espace disponible.
+                            let aspect_ratio = width as f32 / height as f32;
+                            renderer.aspect_ratio = aspect_ratio;
+
+                            // Si la largeur est plus grande que la hauteur alors il faut scale sur
+                            // la largeur.
+                            if aspect_ratio >= display_aspect_ratio {
+                                // Viewport plus large, utilise toute la hauteur.
+                                renderer.left = -aspect_ratio / display_aspect_ratio
+                                    * display_size.x as f32
+                                    / 2.0_f32;
+                                renderer.bottom = display_size.y as f32 / 2.0_f32;
+
+                                renderer.projection = Mat4::ortho(
+                                    renderer.left as i32 - 1,
+                                    -renderer.left as i32,
+                                    renderer.bottom as i32,
+                                    -renderer.bottom as i32 - 1,
+                                    -100.0_f32,
+                                    100.0_f32,
+                                );
+                            // Sinon il faut scale sur la hauteur.
+                            } else {
+                                // Viewport plus haut, utilise toute la largeur.
+                                renderer.left = -display_size.x as f32 / 2.0_f32;
+                                renderer.bottom = display_aspect_ratio / aspect_ratio
+                                    * display_size.y as f32
+                                    / 2.0_f32;
+
+                                renderer.projection = Mat4::ortho(
+                                    renderer.left as i32 - 1,
+                                    -renderer.left as i32,
+                                    renderer.bottom as i32,
+                                    -renderer.bottom as i32,
+                                    -100.0_f32,
+                                    100.0_f32,
+                                );
+                            }
                         }
                     }
                     _ => {}
@@ -243,7 +288,7 @@ impl<'a> Window<'a> {
             {
                 for drawing_object in renderer.borrow_drawing_objects().iter() {
                     if drawing_object.is_visible() {
-                        if let Err(err) = drawing_object.draw() {
+                        if let Err(err) = drawing_object.draw(&renderer, &renderer.projection) {
                             eprintln!("{err}");
 
                             continue;

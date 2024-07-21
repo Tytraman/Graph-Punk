@@ -82,20 +82,43 @@ impl DataObject {
         })
     }
 
-    pub fn draw(&self) -> Result<(), String> {
-        let transform_uniform = match self.uniforms.get("chip_transform") {
+    pub fn draw(&self, renderer: &Renderer, projection: &Mat4<f32>) -> Result<(), String> {
+        let punk_model = "punk_model";
+        let punk_projection = "punk_projection";
+
+        let mut model = Mat4::new();
+
+        let model_uniform = match self.uniforms.get(punk_model) {
             Some(t) => t,
-            None => return Err("chip_transform uniform not found".to_string()),
+            None => return Err(format!("{punk_model} uniform not found")),
+        };
+
+        let projection_uniform = match self.uniforms.get(punk_projection) {
+            Some(t) => t,
+            None => return Err(format!("{punk_projection} uniform not found")),
         };
 
         if let Err(err) = self.shader_program.use_it() {
             return Err(err);
         }
 
-        let mut trans = Mat4::translate(&Mat4::new(), &self.position);
-        trans = Mat4::scale(&trans, &self.scale);
+        let mut position = self.position.clone();
 
-        if let Err(err) = transform_uniform.send_mat4(&trans) {
+        let display_size = renderer.get_display_size();
+
+        // Fait en sorte que l'origine soit en haut à gauche du rendu.
+        position.x -= display_size.x as f32 * 0.5_f32;
+        position.y -= display_size.y as f32 * 0.5_f32;
+
+        // TODO: rotate
+        model = Mat4::translate(&model, &position);
+        model = Mat4::scale(&model, &self.scale);
+
+        if let Err(err) = model_uniform.send_mat4(&model) {
+            return Err(err);
+        }
+
+        if let Err(err) = projection_uniform.send_mat4(&projection) {
             return Err(err);
         }
 

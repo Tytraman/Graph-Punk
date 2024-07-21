@@ -1,5 +1,8 @@
 use crate::{
-    maths::vec::{Vec3, Vec4},
+    maths::{
+        mat::Mat4,
+        vec::{Vec3, Vec4},
+    },
     renderer::{
         data_object::{AttribPointer, DataObject},
         uniform::Uniform,
@@ -49,16 +52,22 @@ impl Rectangle {
             return Err(err);
         }
 
-        let color_name = "chip_color";
+        let color_name = "punk_color";
         let mut color_uniform = Uniform::new();
-        let mut transform_uniform = Uniform::new();
+        let mut model_uniform = Uniform::new();
+        let mut projection_uniform = Uniform::new();
 
         if let Err(err) = color_uniform.search(&shader_program, color_name) {
             return Err(err);
         }
 
-        let transform_name = "chip_transform";
-        if let Err(err) = transform_uniform.search(&shader_program, transform_name) {
+        let punk_model = "punk_model";
+        if let Err(err) = model_uniform.search(&shader_program, punk_model) {
+            return Err(err);
+        }
+
+        let punk_projection = "punk_projection";
+        if let Err(err) = projection_uniform.search(&shader_program, punk_projection) {
             return Err(err);
         }
 
@@ -72,7 +81,8 @@ impl Rectangle {
         }
 
         uniforms.insert(color_name.to_string(), color_uniform);
-        uniforms.insert(transform_name.to_string(), transform_uniform);
+        uniforms.insert(punk_model.to_string(), model_uniform);
+        uniforms.insert(punk_projection.to_string(), projection_uniform);
 
         rect.set_shader_program(shader_program);
 
@@ -81,8 +91,8 @@ impl Rectangle {
 }
 
 impl Draw for Rectangle {
-    fn draw(&self) -> Result<(), String> {
-        self.data_object.draw()
+    fn draw(&self, renderer: &Renderer, projection: &Mat4<f32>) -> Result<(), String> {
+        self.data_object.draw(renderer, projection)
     }
 
     fn get_position(&self) -> Vec3<f32> {

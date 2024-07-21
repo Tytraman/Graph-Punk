@@ -4,6 +4,28 @@ pub trait Zero {
     fn zero() -> Self::Output;
 }
 
+pub trait ConvertFrom<T> {
+    type Output;
+
+    fn convert_from(from: T) -> Self::Output;
+}
+
+impl ConvertFrom<i32> for f32 {
+    type Output = f32;
+
+    fn convert_from(from: i32) -> Self::Output {
+        from as Self::Output
+    }
+}
+
+impl ConvertFrom<f32> for f32 {
+    type Output = f32;
+
+    fn convert_from(from: f32) -> Self::Output {
+        from
+    }
+}
+
 impl Zero for f32 {
     type Output = f32;
 

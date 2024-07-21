@@ -6,7 +6,7 @@ use super::{
     rad::Radians,
     sin::Sinus,
     vec::{Vec3, Vec4},
-    zero::Zero,
+    zero::{ConvertFrom, Zero},
 };
 
 pub enum Mat4Index {
@@ -51,6 +51,7 @@ impl Mat4Index {
     }
 }
 
+#[derive(Debug)]
 pub struct Mat4<T> {
     data: [T; 4 * 4],
 }
@@ -74,16 +75,66 @@ where
     }
 }
 
-impl<T> Mat4<T>
+impl<T> ops::Mul<Mat4<T>> for Mat4<T>
 where
     T: ops::Add<Output = T>
         + ops::Mul<Output = T>
+        + ops::Sub<Output = T>
         + ops::Neg<Output = T>
+        + ops::Div<Output = T>
         + Zero<Output = T>
         + One<Output = T>
         + Radians<Output = T>
         + Cosinus<Output = T>
         + Sinus<Output = T>
+        + ConvertFrom<i32, Output = T>
+        + ConvertFrom<f32, Output = T>
+        + Copy,
+{
+    type Output = Mat4<T>;
+
+    fn mul(self, rhs: Mat4<T>) -> Self::Output {
+        Mat4::mul(&self, &rhs)
+    }
+}
+
+impl<T> ops::Mul<&Mat4<T>> for Mat4<T>
+where
+    T: ops::Add<Output = T>
+        + ops::Mul<Output = T>
+        + ops::Sub<Output = T>
+        + ops::Neg<Output = T>
+        + ops::Div<Output = T>
+        + Zero<Output = T>
+        + One<Output = T>
+        + Radians<Output = T>
+        + Cosinus<Output = T>
+        + Sinus<Output = T>
+        + ConvertFrom<i32, Output = T>
+        + ConvertFrom<f32, Output = T>
+        + Copy,
+{
+    type Output = Mat4<T>;
+
+    fn mul(self, rhs: &Mat4<T>) -> Self::Output {
+        Mat4::mul(&self, rhs)
+    }
+}
+
+impl<T> Mat4<T>
+where
+    T: ops::Add<Output = T>
+        + ops::Mul<Output = T>
+        + ops::Sub<Output = T>
+        + ops::Neg<Output = T>
+        + ops::Div<Output = T>
+        + Zero<Output = T>
+        + One<Output = T>
+        + Radians<Output = T>
+        + Cosinus<Output = T>
+        + Sinus<Output = T>
+        + ConvertFrom<i32, Output = T>
+        + ConvertFrom<f32, Output = T>
         + Copy,
 {
     pub fn new() -> Self {
@@ -299,6 +350,29 @@ where
         ];
 
         Self::mul(&m, &Self { data })
+    }
+
+    pub fn ortho(left: i32, right: i32, bottom: i32, top: i32, near: f32, far: f32) -> Self {
+        Self {
+            data: [
+                T::convert_from(2.0_f32 / (right - left) as f32),
+                T::zero(),
+                T::zero(),
+                T::convert_from(-((right + left) as f32 / (right - left) as f32)),
+                T::zero(),
+                T::convert_from(2.0_f32 / (top - bottom) as f32),
+                T::zero(),
+                T::convert_from(-((top + bottom) as f32 / (top - bottom) as f32)),
+                T::zero(),
+                T::zero(),
+                T::convert_from(-2.0_f32 / (far - near)),
+                T::convert_from(-((far + near) / (far - near))),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::one(),
+            ],
+        }
     }
 
     pub fn borrow_data(&self) -> &[T; 4 * 4] {
