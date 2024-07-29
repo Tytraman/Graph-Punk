@@ -8,7 +8,7 @@ use crate::{
         mat::Mat4,
         vec::{Vec3, Vec4},
     },
-    shader::ShaderProgram,
+    shader::program::ShaderProgram,
 };
 
 use super::{check_errors, clear_errors};

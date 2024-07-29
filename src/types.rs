@@ -1,5 +1,6 @@
 use std::any::Any;
 
+#[derive(Clone)]
 pub struct RGB {
     pub r: u8,
     pub g: u8,
@@ -18,6 +19,12 @@ impl RGB {
 
 pub struct UserData {
     pub(crate) data: Option<Box<dyn Any>>,
+}
+
+impl Default for UserData {
+    fn default() -> Self {
+        Self { data: None }
+    }
 }
 
 impl UserData {

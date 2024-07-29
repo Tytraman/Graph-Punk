@@ -1,19 +1,15 @@
-use std::{cell::RefCell, collections::HashMap, fs, rc::Rc};
+use std::cell::{Ref, RefMut};
 
 use gl::types::GLint;
 use sdl2::video::GLContext;
-use vbo::VBO;
 
 use crate::{
-    maths::{
-        mat::Mat4,
-        vec::{Vec2, Vec3},
-    },
-    shader::{Shader, ShaderProgram, ShaderType},
-    shapes::rectangle::Rectangle,
+    maths::{mat::Mat4, vec::Vec2},
+    resource::{renderer_resource::DrawingResource, Resource},
 };
 
 pub mod data_object;
+pub mod draw;
 pub mod uniform;
 pub mod vao;
 pub mod vbo;
@@ -31,151 +27,8 @@ macro_rules! gl_exec {
     }};
 }
 
-pub struct RendererManager {
-    renderers: HashMap<String, Renderer>,
-}
-
-impl RendererManager {
-    pub fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self {
-            renderers: HashMap::new(),
-        }))
-    }
-
-    pub fn init_resources(&mut self, renderer_name: &str) -> Result<(), String> {
-        let renderer = match self.renderers.get_mut(renderer_name) {
-            Some(r) => r,
-            None => return Err("no renderer found".to_string()),
-        };
-
-        let shader_filename = "Builtin/Shaders/basic_2D_vertex_shader.glsl";
-        let vertex_shader = match fs::read_to_string(shader_filename) {
-            Ok(t) => t,
-            Err(e) => return Err(e.to_string()),
-        };
-
-        let shader_filename = "Builtin/Shaders/basic_2D_fragment_shader.glsl";
-        let fragment_shader = match fs::read_to_string(shader_filename) {
-            Ok(t) => t,
-            Err(e) => return Err(e.to_string()),
-        };
-
-        let mut vert_shader = Shader::new(
-            ShaderType::Vertex,
-            "basic_2D_vertex_shader".to_string(),
-            vertex_shader,
-        );
-
-        match vert_shader.create() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        match vert_shader.source() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        match vert_shader.compile() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        let mut frag_shader = Shader::new(
-            ShaderType::Fragment,
-            "basic_2D_fragment_shader".to_string(),
-            fragment_shader,
-        );
-
-        match frag_shader.create() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        match frag_shader.source() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        match frag_shader.compile() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        let program = match ShaderProgram::build(&vert_shader, &frag_shader) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
-
-        if let Err(err) = program.link() {
-            return Err(err);
-        }
-
-        let rect = match Rectangle::build(
-            renderer,
-            program,
-            Vec3 {
-                x: 0.0_f32,
-                y: 0.0_f32,
-                z: 0.0_f32,
-            },
-            Vec3 {
-                x: 1.0_f32,
-                y: 1.0_f32,
-                z: 1.0_f32,
-            },
-        ) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
-
-        for y in 0..32 {
-            for x in 0..64 {
-                let mut rect_clone = rect.clone();
-                rect_clone.set_position(Vec3 {
-                    x: x as f32,
-                    y: y as f32,
-                    z: 0.0_f32,
-                });
-                rect_clone.set_visible(false);
-
-                renderer.drawing_objects.push(Box::new(rect_clone));
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn borrow_mut_renderer(&mut self, name: &str) -> Option<&mut Renderer> {
-        self.renderers.get_mut(name)
-    }
-
-    pub fn add_renderer(&mut self, name: &str, renderer: Renderer) {
-        let _ = self.renderers.insert(name.to_string(), renderer);
-    }
-
-    pub fn get_number_of_renderers(&self) -> usize {
-        self.renderers.len()
-    }
-}
-
-pub trait Draw {
-    fn draw(&self, renderer: &Renderer, projection: &Mat4<f32>) -> Result<(), String>;
-
-    fn get_position(&self) -> Vec3<f32>;
-    fn set_position(&mut self, position: Vec3<f32>);
-
-    fn get_scale(&self) -> Vec3<f32>;
-    fn set_scale(&mut self, scale: Vec3<f32>);
-
-    fn is_visible(&self) -> bool;
-    fn set_visible(&mut self, value: bool);
-}
-
 pub struct Renderer {
     context: GLContext,
-    vbos: HashMap<usize, VBO>,
-    drawing_objects: Vec<Box<dyn Draw>>,
     display_size: Vec2<i32>,
     pub(crate) aspect_ratio: f32,
     pub(crate) left: f32,
@@ -187,13 +40,11 @@ impl Renderer {
     pub fn new(context: GLContext, display_size: Vec2<i32>) -> Self {
         Self {
             context,
-            vbos: HashMap::new(),
-            drawing_objects: Vec::new(),
             display_size,
             aspect_ratio: 1.0_f32,
             left: 0.0_f32,
             bottom: 0.0_f32,
-            projection: Mat4::new(),
+            projection: Mat4::default(),
         }
     }
 
@@ -205,49 +56,91 @@ impl Renderer {
         self.display_size.clone()
     }
 
-    pub fn get_pixel(&mut self, x: usize, y: usize) -> Result<&mut Box<dyn Draw>, String> {
-        if x > 63 || y > 31 {
-            return Err("Indexes are out of bound".to_string());
+    pub fn get_pixel<'a>(
+        &'a mut self,
+        resource: &'a Resource,
+        x: usize,
+        y: usize,
+    ) -> Result<Ref<'_, DrawingResource>, String> {
+        if x >= self.display_size.x as usize || y >= self.display_size.y as usize {
+            return Err("indexes are out of bound".to_string());
         }
 
-        let pixel = match self.drawing_objects.get_mut(y * 64 + x) {
-            Some(t) => t,
-            None => return Err(format!("Cannot find drawing object at {x} {y}")),
-        };
+        let mut drawing_objects = resource
+            .query::<DrawingResource>()
+            .ok_or("no drawing objects".to_string())?;
+
+        let index = y * self.display_size.x as usize + x;
+
+        // `swap_remove` permet de récupérer l'ownership de la valeur retirée.
+        let pixel = drawing_objects.swap_remove(index);
 
         Ok(pixel)
     }
 
-    pub fn clear_grid_pixel(&mut self) -> Result<(), String> {
-        for x in 0..64 {
-            for y in 0..32 {
-                self.set_grid_pixel(x, y, false)?;
+    pub fn get_pixel_mut<'a>(
+        &'a mut self,
+        resource: &'a mut Resource,
+        x: usize,
+        y: usize,
+    ) -> Result<RefMut<'_, DrawingResource>, String> {
+        if x >= self.display_size.x as usize || y >= self.display_size.y as usize {
+            return Err("indexes are out of bound".to_string());
+        }
+
+        let mut drawing_objects = resource
+            .query_mut::<DrawingResource>()
+            .ok_or("no drawing objects".to_string())?;
+
+        let index = y * self.display_size.x as usize + x;
+
+        // `swap_remove` permet de récupérer l'ownership de la valeur retirée.
+        let pixel = drawing_objects.swap_remove(index);
+
+        Ok(pixel)
+    }
+
+    pub fn clear_grid_pixel(&mut self, resource: &mut Resource) -> Result<(), String> {
+        for x in 0..self.display_size.x as usize {
+            for y in 0..self.display_size.y as usize {
+                self.set_grid_pixel(resource, x, y, false)?;
             }
         }
 
         Ok(())
     }
 
-    pub fn toggle_grid_pixel(&mut self, x: usize, y: usize) -> Result<(), String> {
-        let pixel = match self.get_pixel(x, y) {
+    pub fn toggle_grid_pixel(
+        &mut self,
+        resource: &mut Resource,
+        x: usize,
+        y: usize,
+    ) -> Result<(), String> {
+        let mut pixel = match self.get_pixel_mut(resource, x, y) {
             Ok(t) => t,
             Err(err) => return Err(err),
         };
 
-        let visible = pixel.is_visible();
+        let visible = pixel.0.is_visible();
 
-        pixel.set_visible(!visible);
+        pixel.0.set_visible(!visible);
 
         Ok(())
     }
 
-    pub fn set_grid_pixel(&mut self, x: usize, y: usize, value: bool) -> Result<(), String> {
-        let pixel = match self.get_pixel(x, y) {
+    pub fn set_grid_pixel(
+        &mut self,
+        resource: &mut Resource,
+        x: usize,
+        y: usize,
+        value: bool,
+    ) -> Result<(), String> {
+        let mut pixel = match self.get_pixel_mut(resource, x, y) {
             Ok(t) => t,
             Err(err) => return Err(err),
         };
 
-        pixel.set_visible(value);
+        pixel.0.set_visible(value);
 
         Ok(())
     }
@@ -258,10 +151,6 @@ impl Renderer {
 
     pub fn borrow_context(&self) -> &GLContext {
         &self.context
-    }
-
-    pub fn borrow_drawing_objects(&self) -> &Vec<Box<dyn Draw>> {
-        &self.drawing_objects
     }
 }
 
@@ -287,20 +176,7 @@ pub fn check_errors(function_name: &str) -> Result<(), String> {
                 break;
             }
 
-            match error {
-                gl::INVALID_ENUM => code = "INVALID_ENUM".to_string(),
-                gl::INVALID_VALUE => code = "INVALID_VALUE".to_string(),
-                gl::INVALID_OPERATION => code = "INVALID_OPERATION".to_string(),
-                gl::STACK_OVERFLOW => code = "STACK_OVERFLOW".to_string(),
-                gl::STACK_UNDERFLOW => code = "STACK_UNDERFLOW".to_string(),
-                gl::OUT_OF_MEMORY => code = "OUT_OF_MEMORY".to_string(),
-                gl::INVALID_FRAMEBUFFER_OPERATION => {
-                    code = "INVALID_FRAMEBUFFER_OPERATION".to_string()
-                }
-                gl::CONTEXT_LOST => code = "CONTEXT_LOST".to_string(),
-
-                _ => code = error.to_string(),
-            }
+            code = stringify!(error);
 
             message.push_str(&format!("[OpenGL error] {function_name}: {code}"));
         }

@@ -5,10 +5,12 @@ use crate::{
     },
     renderer::{
         data_object::{AttribPointer, DataObject},
+        draw::Draw,
         uniform::Uniform,
-        Draw, Renderer,
+        Renderer,
     },
-    shader::ShaderProgram,
+    resource::Resource,
+    shader::program::ShaderProgram,
 };
 
 use std::mem;
@@ -20,8 +22,9 @@ pub struct Rectangle {
 
 impl Rectangle {
     pub fn build(
-        renderer: &mut Renderer,
+        resource: &mut Resource,
         shader_program: ShaderProgram,
+        color: Vec4<f32>,
         position: Vec3<f32>,
         size: Vec3<f32>,
     ) -> Result<Self, String> {
@@ -40,11 +43,17 @@ impl Rectangle {
             offset: 0,
         };
 
-        let mut rect =
-            match DataObject::build(renderer, pixel, &vec![attrib_pointer], position, size) {
-                Ok(t) => t,
-                Err(err) => return Err(err),
-            };
+        let mut rect = match DataObject::build(
+            resource,
+            pixel,
+            &vec![attrib_pointer],
+            color.clone(),
+            position,
+            size,
+        ) {
+            Ok(t) => t,
+            Err(err) => return Err(err),
+        };
 
         let uniforms = rect.borrow_mut_uniforms();
 
@@ -71,12 +80,7 @@ impl Rectangle {
             return Err(err);
         }
 
-        if let Err(err) = color_uniform.send_vec4(&Vec4 {
-            x: 1.0_f32,
-            y: 1.0_f32,
-            z: 1.0_f32,
-            w: 1.0_f32,
-        }) {
+        if let Err(err) = color_uniform.send_vec4(&color) {
             return Err(err);
         }
 
@@ -93,6 +97,14 @@ impl Rectangle {
 impl Draw for Rectangle {
     fn draw(&self, renderer: &Renderer, projection: &Mat4<f32>) -> Result<(), String> {
         self.data_object.draw(renderer, projection)
+    }
+
+    fn get_color(&self) -> Vec4<f32> {
+        self.data_object.get_color()
+    }
+
+    fn set_color(&mut self, color: Vec4<f32>) {
+        self.data_object.set_color(color);
     }
 
     fn get_position(&self) -> Vec3<f32> {

@@ -9,7 +9,9 @@ use sdl2::{
 
 use crate::{
     gl_exec,
-    renderer::{Renderer, RendererManager},
+    message::MessageCaller,
+    renderer::Renderer,
+    resource::{renderer_resource::DrawingResource, Resource},
     types::{UserData, RGB},
 };
 use crate::{maths::mat::Mat4, renderer::check_errors};
@@ -21,7 +23,7 @@ pub struct Window<'a> {
     sdl: Sdl,
     window: sdl2::video::Window,
     event_pump: EventPump,
-    renderer_name: String,
+    renderer: Renderer,
     keys: Keys,
     background_color: RGB,
     update_callback: Box<dyn FnMut(&Keys, &mut UserData) + 'a>,
@@ -34,7 +36,6 @@ impl<'a> Window<'a> {
         width: u32,
         height: u32,
         display_size: Vec2<i32>,
-        renderer_manager: &mut RendererManager,
     ) -> Result<Self, String> {
         let sdl = sdl2::init()?;
         let video_subsystem = sdl.video()?;
@@ -70,8 +71,6 @@ impl<'a> Window<'a> {
             video_subsystem.gl_get_proc_address(proc_name) as *const std::os::raw::c_void
         });
 
-        let renderer_name = renderer_manager.get_number_of_renderers().to_string();
-
         let renderer = Renderer::new(gl_context, display_size);
         if let Err(err) = renderer.set_viewport_size(width as i32, height as i32) {
             return Err(err);
@@ -79,13 +78,11 @@ impl<'a> Window<'a> {
 
         unsafe { SDL_GL_SetSwapInterval(0) };
 
-        renderer_manager.add_renderer(&renderer_name, renderer);
-
         Ok(Window {
             sdl,
             window,
             event_pump,
-            renderer_name,
+            renderer,
             keys: Keys::new(),
             background_color: RGB::new(0, 0, 0),
             update_callback: Box::new(|_, _| {}),
@@ -93,7 +90,11 @@ impl<'a> Window<'a> {
         })
     }
 
-    pub fn run(&mut self, renderer_manager: Rc<RefCell<RendererManager>>) -> Result<(), String> {
+    pub fn run(
+        &mut self,
+        resource: &mut Resource,
+        message_caller: Rc<RefCell<MessageCaller>>,
+    ) -> Result<(), String> {
         // Boucle infinie de la fenêtre.
         'running: loop {
             self.keys.update_last_key_states();
@@ -206,57 +207,51 @@ impl<'a> Window<'a> {
                         win_event: WindowEvent::Resized(width, height),
                         ..
                     } => {
-                        if let Some(renderer) = renderer_manager
-                            .borrow_mut()
-                            .borrow_mut_renderer(&self.renderer_name)
-                        {
-                            if let Err(err) = renderer.set_viewport_size(width, height) {
-                                eprintln!("{err}");
-                            }
+                        if let Err(err) = self.renderer.set_viewport_size(width, height) {
+                            eprintln!("{err}");
+                        }
 
-                            let display_size = renderer.get_display_size();
-                            let display_aspect_ratio =
-                                display_size.x as f32 / display_size.y as f32;
+                        let display_size = self.renderer.get_display_size();
+                        let display_aspect_ratio = display_size.x as f32 / display_size.y as f32;
 
-                            // Le rapport d'aspect permet d'agrandir / réduire le rendu afin de
-                            // remplir l'espace disponible.
-                            let aspect_ratio = width as f32 / height as f32;
-                            renderer.aspect_ratio = aspect_ratio;
+                        // Le rapport d'aspect permet d'agrandir / réduire le rendu afin de
+                        // remplir l'espace disponible.
+                        let aspect_ratio = width as f32 / height as f32;
+                        self.renderer.aspect_ratio = aspect_ratio;
 
-                            // Si la largeur est plus grande que la hauteur alors il faut scale sur
-                            // la largeur.
-                            if aspect_ratio >= display_aspect_ratio {
-                                // Viewport plus large, utilise toute la hauteur.
-                                renderer.left = -aspect_ratio / display_aspect_ratio
-                                    * display_size.x as f32
-                                    / 2.0_f32;
-                                renderer.bottom = display_size.y as f32 / 2.0_f32;
+                        // Si la largeur est plus grande que la hauteur alors il faut scale sur
+                        // la largeur.
+                        if aspect_ratio >= display_aspect_ratio {
+                            // Viewport plus large, utilise toute la hauteur.
+                            self.renderer.left = -aspect_ratio / display_aspect_ratio
+                                * display_size.x as f32
+                                / 2.0_f32;
+                            self.renderer.bottom = display_size.y as f32 / 2.0_f32;
 
-                                renderer.projection = Mat4::ortho(
-                                    renderer.left as i32 - 1,
-                                    -renderer.left as i32,
-                                    renderer.bottom as i32,
-                                    -renderer.bottom as i32 - 1,
-                                    -100.0_f32,
-                                    100.0_f32,
-                                );
-                            // Sinon il faut scale sur la hauteur.
-                            } else {
-                                // Viewport plus haut, utilise toute la largeur.
-                                renderer.left = -display_size.x as f32 / 2.0_f32;
-                                renderer.bottom = display_aspect_ratio / aspect_ratio
-                                    * display_size.y as f32
-                                    / 2.0_f32;
+                            self.renderer.projection = Mat4::ortho(
+                                self.renderer.left as i32 - 1,
+                                -self.renderer.left as i32,
+                                self.renderer.bottom as i32,
+                                -self.renderer.bottom as i32 - 1,
+                                -100.0_f32,
+                                100.0_f32,
+                            );
+                        // Sinon il faut scale sur la hauteur.
+                        } else {
+                            // Viewport plus haut, utilise toute la largeur.
+                            self.renderer.left = -display_size.x as f32 / 2.0_f32;
+                            self.renderer.bottom = display_aspect_ratio / aspect_ratio
+                                * display_size.y as f32
+                                / 2.0_f32;
 
-                                renderer.projection = Mat4::ortho(
-                                    renderer.left as i32 - 1,
-                                    -renderer.left as i32,
-                                    renderer.bottom as i32,
-                                    -renderer.bottom as i32,
-                                    -100.0_f32,
-                                    100.0_f32,
-                                );
-                            }
+                            self.renderer.projection = Mat4::ortho(
+                                self.renderer.left as i32 - 1,
+                                -self.renderer.left as i32,
+                                self.renderer.bottom as i32,
+                                -self.renderer.bottom as i32,
+                                -100.0_f32,
+                                100.0_f32,
+                            );
                         }
                     }
                     _ => {}
@@ -265,6 +260,10 @@ impl<'a> Window<'a> {
 
             // Appelle la fonction de callback pour mettre à jour l'état du moteur et du programme.
             (self.update_callback)(&self.keys, &mut self.user_data);
+
+            message_caller
+                .borrow_mut()
+                .execute(&mut self.renderer, resource);
 
             // Défini la couleur qu'OpenGL va utiliser pour nettoyer l'écran.
             if let Err(err) = gl_exec!(|| gl::ClearColor(
@@ -282,26 +281,29 @@ impl<'a> Window<'a> {
             }
 
             // Dessine tous les objets.
-            if let Some(renderer) = renderer_manager
-                .borrow_mut()
-                .borrow_mut_renderer(&self.renderer_name)
-            {
-                for drawing_object in renderer.borrow_drawing_objects().iter() {
-                    if drawing_object.is_visible() {
-                        if let Err(err) = drawing_object.draw(&renderer, &renderer.projection) {
+            if let Some(query) = resource.query::<DrawingResource>() {
+                for drawing_object in query.iter() {
+                    if drawing_object.0.is_visible() {
+                        if let Err(err) = drawing_object
+                            .0
+                            .draw(&self.renderer, &self.renderer.projection)
+                        {
                             eprintln!("{err}");
 
                             continue;
                         }
                     }
                 }
+                // Met à jour le contenu dessiné sur la fenêtre.
+                self.window.gl_swap_window();
             }
-
-            // Met à jour le contenu dessiné sur la fenêtre.
-            self.window.gl_swap_window();
         }
 
         Ok(())
+    }
+
+    pub fn set_display_size(&mut self, size: Vec2<i32>) {
+        self.renderer.set_display_size(size);
     }
 
     pub fn get_width(&self) -> u32 {
@@ -316,6 +318,14 @@ impl<'a> Window<'a> {
         &self.sdl
     }
 
+    pub fn borrow_renderer(&self) -> &Renderer {
+        &self.renderer
+    }
+
+    pub fn borrow_renderer_mut(&mut self) -> &mut Renderer {
+        &mut self.renderer
+    }
+
     pub fn set_update_callback(
         &mut self,
         c: impl FnMut(&Keys, &mut UserData) + 'a,
@@ -323,9 +333,5 @@ impl<'a> Window<'a> {
     ) {
         self.update_callback = Box::new(c);
         self.user_data = user_data;
-    }
-
-    pub fn get_renderer_name(&self) -> &str {
-        &self.renderer_name
     }
 }

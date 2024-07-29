@@ -4,8 +4,12 @@ use gl::types::GLsizei;
 
 use crate::{
     gl_exec,
-    maths::{mat::Mat4, vec::Vec3},
-    shader::ShaderProgram,
+    maths::{
+        mat::Mat4,
+        vec::{Vec3, Vec4},
+    },
+    resource::{gl_resource::VBOResource, Resource},
+    shader::program::ShaderProgram,
 };
 
 use super::{check_errors, clear_errors, uniform::Uniform, vao::VAO, vbo::VBO, Renderer};
@@ -16,6 +20,7 @@ pub struct DataObject {
     vao: VAO,
     shader_program: ShaderProgram,
     uniforms: HashMap<String, Uniform>,
+    color: Vec4<f32>,
     position: Vec3<f32>,
     scale: Vec3<f32>,
     visible: bool,
@@ -32,9 +37,10 @@ pub type AttribPointers = Vec<AttribPointer>;
 
 impl DataObject {
     pub fn build(
-        renderer: &mut Renderer,
+        resource: &mut Resource,
         vertices: Vec<f32>,
         attrib_pointers: &AttribPointers,
+        color: Vec4<f32>,
         position: Vec3<f32>,
         scale: Vec3<f32>,
     ) -> Result<Self, String> {
@@ -54,7 +60,8 @@ impl DataObject {
 
         let vertices_number = vbo.borrow_vertices().len();
 
-        renderer.vbos.insert(vbo.get_id() as usize, vbo);
+        let vbo_resource = VBOResource(vbo);
+        resource.add(&vbo_resource.0.get_id().to_string(), vbo_resource);
 
         let mut index = 0;
         for attrib in attrib_pointers.iter() {
@@ -76,6 +83,7 @@ impl DataObject {
             vao,
             shader_program: ShaderProgram::none(),
             uniforms: HashMap::new(),
+            color,
             position,
             scale,
             visible: true,
@@ -85,8 +93,9 @@ impl DataObject {
     pub fn draw(&self, renderer: &Renderer, projection: &Mat4<f32>) -> Result<(), String> {
         let punk_model = "punk_model";
         let punk_projection = "punk_projection";
+        let punk_color = "punk_color";
 
-        let mut model = Mat4::new();
+        let mut model = Mat4::default();
 
         let model_uniform = match self.uniforms.get(punk_model) {
             Some(t) => t,
@@ -96,6 +105,11 @@ impl DataObject {
         let projection_uniform = match self.uniforms.get(punk_projection) {
             Some(t) => t,
             None => return Err(format!("{punk_projection} uniform not found")),
+        };
+
+        let color_uniform = match self.uniforms.get(punk_color) {
+            Some(t) => t,
+            None => return Err(format!("{punk_color} uniform not found")),
         };
 
         if let Err(err) = self.shader_program.use_it() {
@@ -122,6 +136,10 @@ impl DataObject {
             return Err(err);
         }
 
+        if let Err(err) = color_uniform.send_vec4(&self.color) {
+            return Err(err);
+        }
+
         if let Err(err) = self.vao.bind() {
             return Err(err);
         }
@@ -131,6 +149,14 @@ impl DataObject {
 
     pub fn get_vertices_number(&self) -> usize {
         self.vertices_number
+    }
+
+    pub fn get_color(&self) -> Vec4<f32> {
+        self.color.clone()
+    }
+
+    pub fn set_color(&mut self, color: Vec4<f32>) {
+        self.color = color;
     }
 
     pub fn get_position(&self) -> Vec3<f32> {

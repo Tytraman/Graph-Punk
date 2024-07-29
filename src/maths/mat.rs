@@ -56,6 +56,31 @@ pub struct Mat4<T> {
     data: [T; 4 * 4],
 }
 
+impl<T: Zero<Output = T> + One<Output = T>> Default for Mat4<T> {
+    fn default() -> Self {
+        Self {
+            data: [
+                T::one(),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::one(),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::one(),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::zero(),
+                T::one(),
+            ],
+        }
+    }
+}
+
 impl<T> ops::Index<Mat4Index> for Mat4<T> {
     type Output = T;
 
@@ -137,29 +162,6 @@ where
         + ConvertFrom<f32, Output = T>
         + Copy,
 {
-    pub fn new() -> Self {
-        Self {
-            data: [
-                T::one(),
-                T::zero(),
-                T::zero(),
-                T::zero(),
-                T::zero(),
-                T::one(),
-                T::zero(),
-                T::zero(),
-                T::zero(),
-                T::zero(),
-                T::one(),
-                T::zero(),
-                T::zero(),
-                T::zero(),
-                T::zero(),
-                T::one(),
-            ],
-        }
-    }
-
     pub fn mul(m1: &Self, m2: &Self) -> Self {
         let data: [T; 4 * 4] = [
             (m1[Mat4Index::X1] * m2[Mat4Index::X1]

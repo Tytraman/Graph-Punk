@@ -3,12 +3,22 @@ use std::ops::{self, Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAss
 use super::{
     mat::{Mat4, Mat4Index},
     sqrt::Sqrt,
+    zero::Zero,
 };
 
 #[derive(Clone)]
 pub struct Vec2<T> {
     pub x: T,
     pub y: T,
+}
+
+impl<T: Zero<Output = T>> Default for Vec2<T> {
+    fn default() -> Self {
+        Self {
+            x: T::zero(),
+            y: T::zero(),
+        }
+    }
 }
 
 // Surcharge l'opérateur '+'.
@@ -68,6 +78,16 @@ pub struct Vec3<T> {
     pub x: T,
     pub y: T,
     pub z: T,
+}
+
+impl<T: Zero<Output = T>> Default for Vec3<T> {
+    fn default() -> Self {
+        Self {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+        }
+    }
 }
 
 // Surcharge l'opérateur '+'.
@@ -669,11 +689,23 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct Vec4<T> {
     pub x: T,
     pub y: T,
     pub z: T,
     pub w: T,
+}
+
+impl<T: Zero<Output = T>> Default for Vec4<T> {
+    fn default() -> Self {
+        Self {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::zero(),
+        }
+    }
 }
 
 // Surcharge l'opérateur '+'.
