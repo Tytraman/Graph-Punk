@@ -1,12 +1,19 @@
 use std::collections::HashMap;
 
-use crate::{renderer::Renderer, resource::Resource, types::UserData};
+use crate::{
+    renderer::{draw::Draw, Renderer},
+    resource::Resource,
+    types::UserData,
+};
 
 pub struct MessageCaller<'a> {
     messages: HashMap<
         String,
         (
-            Box<dyn FnMut(&mut Renderer, &mut Resource, &mut UserData) + 'a>,
+            Box<
+                dyn FnMut(&mut Renderer, &mut Resource, &mut Vec<Box<dyn Draw>>, &mut UserData)
+                    + 'a,
+            >,
             Vec<UserData>,
         ),
     >,
@@ -24,7 +31,7 @@ impl<'a> MessageCaller<'a> {
     pub fn register_message(
         &mut self,
         unique_id: &str,
-        c: impl FnMut(&mut Renderer, &mut Resource, &mut UserData) + 'a,
+        c: impl FnMut(&mut Renderer, &mut Resource, &mut Vec<Box<dyn Draw>>, &mut UserData) + 'a,
     ) {
         self.messages
             .insert(unique_id.to_string(), (Box::new(c), Vec::new()));
@@ -41,13 +48,17 @@ impl<'a> MessageCaller<'a> {
         Ok(())
     }
 
-    pub fn execute(&mut self, renderer: &mut Renderer, resource: &mut Resource) {
+    pub fn execute(
+        &mut self,
+        renderer: &mut Renderer,
+        drawing_resources: &mut Vec<Box<dyn Draw>>,
+        resource: &mut Resource,
+    ) {
         self.messages.iter_mut().for_each(|(_, message)| {
             if !message.1.is_empty() {
-                message
-                    .1
-                    .iter_mut()
-                    .for_each(|user_data| (message.0)(renderer, resource, user_data));
+                message.1.iter_mut().for_each(|user_data| {
+                    (message.0)(renderer, resource, drawing_resources, user_data)
+                });
 
                 message.1.clear();
             }

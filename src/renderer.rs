@@ -1,12 +1,9 @@
-use std::cell::{Ref, RefMut};
-
 use gl::types::GLint;
 use sdl2::video::GLContext;
 
-use crate::{
-    maths::{mat::Mat4, vec::Vec2},
-    resource::{renderer_resource::DrawingResource, Resource},
-};
+use crate::maths::{mat::Mat4, vec::Vec2};
+
+use self::draw::Draw;
 
 pub mod data_object;
 pub mod draw;
@@ -58,52 +55,45 @@ impl Renderer {
 
     pub fn get_pixel<'a>(
         &'a mut self,
-        resource: &'a Resource,
+        drawing_objects: &'a Vec<Box<dyn Draw>>,
         x: usize,
         y: usize,
-    ) -> Result<Ref<'_, DrawingResource>, String> {
+    ) -> Result<&Box<dyn Draw>, String> {
         if x >= self.display_size.x as usize || y >= self.display_size.y as usize {
             return Err("indexes are out of bound".to_string());
         }
 
-        let mut drawing_objects = resource
-            .query::<DrawingResource>()
-            .ok_or("no drawing objects".to_string())?;
-
         let index = y * self.display_size.x as usize + x;
 
-        // `swap_remove` permet de récupérer l'ownership de la valeur retirée.
-        let pixel = drawing_objects.swap_remove(index);
+        let pixel = drawing_objects.get(index).ok_or("no pixel found")?;
 
         Ok(pixel)
     }
 
     pub fn get_pixel_mut<'a>(
         &'a mut self,
-        resource: &'a mut Resource,
+        drawing_objects: &'a mut Vec<Box<dyn Draw>>,
         x: usize,
         y: usize,
-    ) -> Result<RefMut<'_, DrawingResource>, String> {
+    ) -> Result<&mut Box<dyn Draw>, String> {
         if x >= self.display_size.x as usize || y >= self.display_size.y as usize {
             return Err("indexes are out of bound".to_string());
         }
 
-        let mut drawing_objects = resource
-            .query_mut::<DrawingResource>()
-            .ok_or("no drawing objects".to_string())?;
-
         let index = y * self.display_size.x as usize + x;
 
-        // `swap_remove` permet de récupérer l'ownership de la valeur retirée.
-        let pixel = drawing_objects.swap_remove(index);
+        let pixel = drawing_objects.get_mut(index).ok_or("no pixel found")?;
 
         Ok(pixel)
     }
 
-    pub fn clear_grid_pixel(&mut self, resource: &mut Resource) -> Result<(), String> {
+    pub fn clear_grid_pixel(
+        &mut self,
+        drawing_objects: &mut Vec<Box<dyn Draw>>,
+    ) -> Result<(), String> {
         for x in 0..self.display_size.x as usize {
             for y in 0..self.display_size.y as usize {
-                self.set_grid_pixel(resource, x, y, false)?;
+                self.set_grid_pixel(drawing_objects, x, y, false)?;
             }
         }
 
@@ -112,35 +102,29 @@ impl Renderer {
 
     pub fn toggle_grid_pixel(
         &mut self,
-        resource: &mut Resource,
+        drawing_objects: &mut Vec<Box<dyn Draw>>,
         x: usize,
         y: usize,
     ) -> Result<(), String> {
-        let mut pixel = match self.get_pixel_mut(resource, x, y) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+        let pixel = self.get_pixel_mut(drawing_objects, x, y)?;
 
-        let visible = pixel.0.is_visible();
+        let visible = pixel.is_visible();
 
-        pixel.0.set_visible(!visible);
+        pixel.set_visible(!visible);
 
         Ok(())
     }
 
     pub fn set_grid_pixel(
         &mut self,
-        resource: &mut Resource,
+        drawing_objects: &mut Vec<Box<dyn Draw>>,
         x: usize,
         y: usize,
         value: bool,
     ) -> Result<(), String> {
-        let mut pixel = match self.get_pixel_mut(resource, x, y) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+        let pixel = self.get_pixel_mut(drawing_objects, x, y)?;
 
-        pixel.0.set_visible(value);
+        pixel.set_visible(value);
 
         Ok(())
     }

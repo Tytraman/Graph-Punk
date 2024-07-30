@@ -13,10 +13,7 @@ use crate::{
     shapes::rectangle::Rectangle,
 };
 
-use self::renderer_resource::DrawingResource;
-
 pub mod gl_resource;
-pub mod renderer_resource;
 pub mod shape_resource;
 
 pub struct Resource {
@@ -133,7 +130,10 @@ impl Resource {
         })
     }
 
-    pub fn init_basic_resources(&mut self) -> Result<(), String> {
+    pub fn init_basic_resources(
+        &mut self,
+        drawing_objects: &mut Vec<Box<dyn Draw>>,
+    ) -> Result<(), String> {
         let basic_2d_vertex_shader = include_str!("../Builtin/Shaders/basic_2D_vertex_shader.glsl");
 
         let basic_2d_fragment_shader =
@@ -214,8 +214,6 @@ impl Resource {
             Err(err) => return Err(err),
         };
 
-        let mut number = 0;
-
         for y in 0..32 {
             for x in 0..64 {
                 let mut rect_clone = rect.clone();
@@ -226,12 +224,7 @@ impl Resource {
                 });
                 rect_clone.set_visible(false);
 
-                self.add(
-                    &format!("basic_rectangle_{number}"),
-                    DrawingResource(Box::new(rect_clone)),
-                );
-
-                number += 1;
+                drawing_objects.push(Box::new(rect_clone));
             }
         }
 

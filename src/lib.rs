@@ -5,8 +5,10 @@ use std::{
     rc::Rc,
 };
 
+use benchmark::BenchmarkManager;
 use maths::vec::Vec2;
 use message::MessageCaller;
+use renderer::draw::Draw;
 use resource::Resource;
 use types::UserData;
 use window::{user_input::Keys, window::Window};
@@ -25,6 +27,8 @@ pub mod window;
 pub struct GraphPunk<'a> {
     windows: HashMap<String, Window<'a>>,
     resources: Resource,
+    drawing_objects: Vec<Box<dyn Draw>>,
+    benchmark: BenchmarkManager,
 }
 
 impl<'a> GraphPunk<'a> {
@@ -32,6 +36,8 @@ impl<'a> GraphPunk<'a> {
         Self {
             windows: HashMap::new(),
             resources: Resource::new(),
+            drawing_objects: Vec::new(),
+            benchmark: BenchmarkManager::default(),
         }
     }
 
@@ -96,7 +102,7 @@ impl<'a> GraphPunk<'a> {
 
         window
             .borrow_renderer_mut()
-            .clear_grid_pixel(&mut self.resources)?;
+            .clear_grid_pixel(&mut self.drawing_objects)?;
 
         Ok(())
     }
@@ -115,7 +121,7 @@ impl<'a> GraphPunk<'a> {
 
         window
             .borrow_renderer_mut()
-            .set_grid_pixel(&mut self.resources, x, y, value)
+            .set_grid_pixel(&mut self.drawing_objects, x, y, value)
     }
 
     pub fn add_resource(&mut self, unique_id: &str, data: impl Any) {
@@ -139,7 +145,8 @@ impl<'a> GraphPunk<'a> {
     }
 
     pub fn init_basic_resources(&mut self) -> Result<(), String> {
-        self.resources.init_basic_resources()
+        self.resources
+            .init_basic_resources(&mut self.drawing_objects)
     }
 
     pub fn run_window(
@@ -152,7 +159,16 @@ impl<'a> GraphPunk<'a> {
             .get_mut(unique_id)
             .ok_or("no window found".to_string())?;
 
-        window.run(&mut self.resources, message_caller)
+        window.run(
+            &mut self.resources,
+            &mut self.drawing_objects,
+            message_caller,
+            &mut self.benchmark,
+        )
+    }
+
+    pub fn benchmark_print_results(&self) {
+        self.benchmark.print_results();
     }
 }
 

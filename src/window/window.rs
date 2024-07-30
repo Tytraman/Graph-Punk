@@ -8,10 +8,11 @@ use sdl2::{
 };
 
 use crate::{
+    benchmark::BenchmarkManager,
     gl_exec,
     message::MessageCaller,
-    renderer::Renderer,
-    resource::{renderer_resource::DrawingResource, Resource},
+    renderer::{draw::Draw, Renderer},
+    resource::Resource,
     types::{UserData, RGB},
 };
 use crate::{maths::mat::Mat4, renderer::check_errors};
@@ -93,7 +94,9 @@ impl<'a> Window<'a> {
     pub fn run(
         &mut self,
         resource: &mut Resource,
+        drawing_objects: &mut Vec<Box<dyn Draw>>,
         message_caller: Rc<RefCell<MessageCaller>>,
+        benchmark: &mut BenchmarkManager,
     ) -> Result<(), String> {
         // Boucle infinie de la fenêtre.
         'running: loop {
@@ -259,11 +262,15 @@ impl<'a> Window<'a> {
             }
 
             // Appelle la fonction de callback pour mettre à jour l'état du moteur et du programme.
-            (self.update_callback)(&self.keys, &mut self.user_data);
+            benchmark.bench("graph_punk_update_callback".to_string(), || {
+                (self.update_callback)(&self.keys, &mut self.user_data);
+            });
 
-            message_caller
-                .borrow_mut()
-                .execute(&mut self.renderer, resource);
+            benchmark.bench("graph_punk_message_caller".to_string(), || {
+                message_caller
+                    .borrow_mut()
+                    .execute(&mut self.renderer, drawing_objects, resource);
+            });
 
             // Défini la couleur qu'OpenGL va utiliser pour nettoyer l'écran.
             if let Err(err) = gl_exec!(|| gl::ClearColor(
@@ -281,12 +288,11 @@ impl<'a> Window<'a> {
             }
 
             // Dessine tous les objets.
-            if let Some(query) = resource.query::<DrawingResource>() {
-                for drawing_object in query.iter() {
-                    if drawing_object.0.is_visible() {
-                        if let Err(err) = drawing_object
-                            .0
-                            .draw(&self.renderer, &self.renderer.projection)
+            benchmark.bench("graph_punk_rendering".to_string(), || {
+                for drawing_object in drawing_objects.iter() {
+                    if drawing_object.is_visible() {
+                        if let Err(err) =
+                            drawing_object.draw(&self.renderer, &self.renderer.projection)
                         {
                             eprintln!("{err}");
 
@@ -296,7 +302,7 @@ impl<'a> Window<'a> {
                 }
                 // Met à jour le contenu dessiné sur la fenêtre.
                 self.window.gl_swap_window();
-            }
+            });
         }
 
         Ok(())
