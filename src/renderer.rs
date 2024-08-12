@@ -1,3 +1,4 @@
+use font::FontContext;
 use gl::types::GLint;
 use sdl2::video::GLContext;
 
@@ -7,6 +8,7 @@ use self::draw::Draw;
 
 pub mod data_object;
 pub mod draw;
+pub mod font;
 pub mod uniform;
 pub mod vao;
 pub mod vbo;
@@ -15,11 +17,11 @@ pub mod vbo;
 macro_rules! gl_exec {
     ( $closure:expr ) => {{
         unsafe {
-            clear_errors();
+            $crate::renderer::clear_errors();
 
             $closure();
 
-            check_errors(stringify!($closure))
+            $crate::renderer::check_errors(stringify!($closure))
         }
     }};
 }
@@ -31,18 +33,25 @@ pub struct Renderer {
     pub(crate) left: f32,
     pub(crate) bottom: f32,
     pub(crate) projection: Mat4<f32>,
+    pub(crate) font_context: FontContext,
 }
 
 impl Renderer {
-    pub fn new(context: GLContext, display_size: Vec2<i32>) -> Self {
-        Self {
+    pub fn build(context: GLContext, display_size: Vec2<i32>) -> Result<Self, String> {
+        gl_exec!(|| gl::Enable(gl::BLEND))?;
+        gl_exec!(|| gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA))?;
+
+        let font_context = FontContext::build()?;
+
+        Ok(Self {
             context,
             display_size,
             aspect_ratio: 1.0_f32,
             left: 0.0_f32,
             bottom: 0.0_f32,
             projection: Mat4::default(),
-        }
+            font_context,
+        })
     }
 
     pub fn set_display_size(&mut self, display_size: Vec2<i32>) {

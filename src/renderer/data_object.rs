@@ -8,21 +8,26 @@ use crate::{
         mat::Mat4,
         vec::{Vec3, Vec4},
     },
-    resource::{gl_resource::VBOResource, Resource},
     shader::program::ShaderProgram,
 };
 
-use super::{check_errors, clear_errors, uniform::Uniform, vao::VAO, vbo::VBO, Renderer};
+use super::{
+    uniform::Uniform,
+    vao::VAO,
+    vbo::{VBOType, VBO},
+    Renderer,
+};
 
 #[derive(Clone)]
 pub struct DataObject {
-    vertices_number: usize,
-    vao: VAO,
-    shader_program: ShaderProgram,
-    uniforms: HashMap<String, Uniform>,
-    color: Vec4<f32>,
-    position: Vec3<f32>,
-    scale: Vec3<f32>,
+    pub(crate) vertices_number: usize,
+    pub(crate) vao: VAO,
+    pub(crate) vbo: VBO,
+    pub(crate) shader_program: ShaderProgram,
+    pub(crate) uniforms: HashMap<String, Uniform>,
+    pub(crate) color: Vec4<f32>,
+    pub(crate) position: Vec3<f32>,
+    pub(crate) scale: Vec3<f32>,
     visible: bool,
 }
 
@@ -37,43 +42,26 @@ pub type AttribPointers = Vec<AttribPointer>;
 
 impl DataObject {
     pub fn build(
-        resource: &mut Resource,
         vertices: Vec<f32>,
+        size: isize,
         attrib_pointers: &AttribPointers,
         color: Vec4<f32>,
         position: Vec3<f32>,
         scale: Vec3<f32>,
+        type_: VBOType,
     ) -> Result<Self, String> {
-        let vao = match VAO::build() {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+        let vao = VAO::build()?;
 
-        if let Err(err) = vao.bind() {
-            return Err(err);
-        }
+        vao.bind()?;
 
-        let vbo = match VBO::build(vertices) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+        let vbo = VBO::build(vertices, size, type_)?;
 
         let vertices_number = vbo.borrow_vertices().len();
 
-        let vbo_resource = VBOResource(vbo);
-        resource.add(&vbo_resource.0.get_id().to_string(), vbo_resource);
-
         let mut index = 0;
         for attrib in attrib_pointers.iter() {
-            if let Err(err) =
-                vao.attrib_pointer(attrib.index, attrib.size, attrib.stride, attrib.offset)
-            {
-                return Err(err);
-            };
-
-            if let Err(err) = vao.enable_attrib(index) {
-                return Err(err);
-            }
+            vao.attrib_pointer(attrib.index, attrib.size, attrib.stride, attrib.offset)?;
+            vao.enable_attrib(index)?;
 
             index += 1;
         }
@@ -81,6 +69,7 @@ impl DataObject {
         Ok(Self {
             vertices_number,
             vao,
+            vbo,
             shader_program: ShaderProgram::none(),
             uniforms: HashMap::new(),
             color,
@@ -97,24 +86,22 @@ impl DataObject {
 
         let mut model = Mat4::default();
 
-        let model_uniform = match self.uniforms.get(punk_model) {
-            Some(t) => t,
-            None => return Err(format!("{punk_model} uniform not found")),
-        };
+        let model_uniform = self
+            .uniforms
+            .get(punk_model)
+            .ok_or(format!("{punk_model} uniform not found"))?;
 
-        let projection_uniform = match self.uniforms.get(punk_projection) {
-            Some(t) => t,
-            None => return Err(format!("{punk_projection} uniform not found")),
-        };
+        let projection_uniform = self
+            .uniforms
+            .get(punk_projection)
+            .ok_or(format!("{punk_projection} uniform not found"))?;
 
-        let color_uniform = match self.uniforms.get(punk_color) {
-            Some(t) => t,
-            None => return Err(format!("{punk_color} uniform not found")),
-        };
+        let color_uniform = self
+            .uniforms
+            .get(punk_color)
+            .ok_or(format!("{punk_color} uniform not found"))?;
 
-        if let Err(err) = self.shader_program.use_it() {
-            return Err(err);
-        }
+        self.shader_program.use_it()?;
 
         let mut position = self.position.clone();
 
@@ -128,21 +115,11 @@ impl DataObject {
         model = Mat4::translate(&model, &position);
         model = Mat4::scale(&model, &self.scale);
 
-        if let Err(err) = model_uniform.send_mat4(&model) {
-            return Err(err);
-        }
+        model_uniform.send_mat4(&model)?;
+        projection_uniform.send_mat4(&projection)?;
+        color_uniform.send_vec4(&self.color)?;
 
-        if let Err(err) = projection_uniform.send_mat4(&projection) {
-            return Err(err);
-        }
-
-        if let Err(err) = color_uniform.send_vec4(&self.color) {
-            return Err(err);
-        }
-
-        if let Err(err) = self.vao.bind() {
-            return Err(err);
-        }
+        self.vao.bind()?;
 
         gl_exec!(|| gl::DrawArrays(gl::TRIANGLES, 0, self.get_vertices_number() as GLsizei))
     }

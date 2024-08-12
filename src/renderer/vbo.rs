@@ -1,39 +1,44 @@
-use std::mem::size_of;
+use std::ptr;
 
 use gl::types::GLuint;
 
 use crate::gl_exec;
 
-use super::{check_errors, clear_errors};
-
+#[derive(Clone)]
 pub struct VBO {
     vertices: Vec<f32>,
     id: GLuint,
 }
 
+pub enum VBOType {
+    StaticDraw,
+    DynamicDraw,
+}
+
 impl VBO {
-    pub fn build(mut vertices: Vec<f32>) -> Result<Self, String> {
+    pub fn build(mut vertices: Vec<f32>, size: isize, type_: VBOType) -> Result<Self, String> {
         let mut id = 0;
 
         // Génère un nouveau VBO.
-        if let Err(err) = gl_exec!(|| gl::GenBuffers(1, &mut id)) {
-            return Err(err);
-        }
+        gl_exec!(|| gl::GenBuffers(1, &mut id))?;
 
         // Rend le nouveau VBO actif.
-        if let Err(err) = gl_exec!(|| gl::BindBuffer(gl::ARRAY_BUFFER, id)) {
-            return Err(err);
-        }
+        gl_exec!(|| gl::BindBuffer(gl::ARRAY_BUFFER, id))?;
 
         // Copie les données dans le VBO nouvellement créé.
-        if let Err(err) = gl_exec!(|| gl::BufferData(
+        gl_exec!(|| gl::BufferData(
             gl::ARRAY_BUFFER,
-            (vertices.len() * size_of::<f32>()) as isize,
-            vertices.as_mut_ptr() as *const std::os::raw::c_void,
-            gl::STATIC_DRAW,
-        )) {
-            return Err(err);
-        }
+            size,
+            if !vertices.is_empty() {
+                vertices.as_mut_ptr() as *const std::os::raw::c_void
+            } else {
+                ptr::null_mut()
+            },
+            match type_ {
+                VBOType::StaticDraw => gl::STATIC_DRAW,
+                VBOType::DynamicDraw => gl::DYNAMIC_DRAW,
+            }
+        ))?;
 
         Ok(Self { vertices, id })
     }

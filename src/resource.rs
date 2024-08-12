@@ -7,14 +7,13 @@ use std::{
 };
 
 use crate::{
+    drawing::{rectangle::Rectangle, text::Text},
     maths::vec::{Vec3, Vec4},
     renderer::draw::Draw,
     shader::{program::ShaderProgram, Shader, ShaderType},
-    shapes::rectangle::Rectangle,
 };
 
 pub mod gl_resource;
-pub mod shape_resource;
 
 pub struct Resource {
     data: HashMap<TypeId, HashMap<String, ResourceInfo>>,
@@ -135,9 +134,13 @@ impl Resource {
         drawing_objects: &mut Vec<Box<dyn Draw>>,
     ) -> Result<(), String> {
         let basic_2d_vertex_shader = include_str!("../Builtin/Shaders/basic_2D_vertex_shader.glsl");
-
         let basic_2d_fragment_shader =
             include_str!("../Builtin/Shaders/basic_2D_fragment_shader.glsl");
+
+        let basic_text_vertex_shader =
+            include_str!("../Builtin/Shaders/basic_text_vertex_shader.glsl");
+        let basic_text_fragment_shader =
+            include_str!("../Builtin/Shaders/basic_text_fragment_shader.glsl");
 
         let mut vert_shader = Shader::new(
             ShaderType::Vertex,
@@ -145,20 +148,9 @@ impl Resource {
             basic_2d_vertex_shader.to_string(),
         );
 
-        match vert_shader.create() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        match vert_shader.source() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
-
-        match vert_shader.compile() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
+        vert_shader.create()?;
+        vert_shader.source()?;
+        vert_shader.compile()?;
 
         let mut frag_shader = Shader::new(
             ShaderType::Fragment,
@@ -166,32 +158,39 @@ impl Resource {
             basic_2d_fragment_shader.to_string(),
         );
 
-        match frag_shader.create() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
+        frag_shader.create()?;
+        frag_shader.source()?;
+        frag_shader.compile()?;
 
-        match frag_shader.source() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
+        let program = ShaderProgram::build(&vert_shader, &frag_shader)?;
 
-        match frag_shader.compile() {
-            Ok(_) => {}
-            Err(err) => return Err(err),
-        }
+        program.link()?;
 
-        let program = match ShaderProgram::build(&vert_shader, &frag_shader) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+        let mut text_vert_shader = Shader::new(
+            ShaderType::Vertex,
+            "basic_text_vertex_shader".to_string(),
+            basic_text_vertex_shader.to_string(),
+        );
 
-        if let Err(err) = program.link() {
-            return Err(err);
-        }
+        text_vert_shader.create()?;
+        text_vert_shader.source()?;
+        text_vert_shader.compile()?;
 
-        let rect = match Rectangle::build(
-            self,
+        let mut text_frag_shader = Shader::new(
+            ShaderType::Fragment,
+            "basic_text_fragment_shader".to_string(),
+            basic_text_fragment_shader.to_string(),
+        );
+
+        text_frag_shader.create()?;
+        text_frag_shader.source()?;
+        text_frag_shader.compile()?;
+
+        let text_program = ShaderProgram::build(&text_vert_shader, &text_frag_shader)?;
+
+        text_program.link()?;
+
+        let rect = Rectangle::build(
             program,
             Vec4 {
                 x: 1.0_f32,
@@ -209,10 +208,7 @@ impl Resource {
                 y: 1.0_f32,
                 z: 1.0_f32,
             },
-        ) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+        )?;
 
         for y in 0..32 {
             for x in 0..64 {

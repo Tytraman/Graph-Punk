@@ -2,7 +2,6 @@ use std::{ffi::CString, ptr};
 
 use crate::common::PunkString;
 use crate::gl_exec;
-use crate::renderer::{check_errors, clear_errors};
 
 pub mod program;
 

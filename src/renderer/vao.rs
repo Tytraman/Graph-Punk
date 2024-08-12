@@ -4,8 +4,6 @@ use gl::types::GLuint;
 
 use crate::gl_exec;
 
-use super::{check_errors, clear_errors};
-
 #[derive(Clone)]
 pub struct VAO {
     id: GLuint,

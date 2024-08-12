@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 sdl2 = "0.37.0"
 gl = "0.14.0"
+freetype = "0.7.2"

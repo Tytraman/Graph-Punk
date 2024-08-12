@@ -11,8 +11,6 @@ use crate::{
     shader::program::ShaderProgram,
 };
 
-use super::{check_errors, clear_errors};
-
 #[derive(Clone)]
 pub struct Uniform {
     location: GLint,

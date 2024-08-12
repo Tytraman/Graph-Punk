@@ -10,17 +10,18 @@ use maths::vec::Vec2;
 use message::MessageCaller;
 use renderer::draw::Draw;
 use resource::Resource;
+use shader::program::ShaderProgram;
 use types::UserData;
 use window::{user_input::Keys, window::Window};
 
 pub mod benchmark;
 pub mod common;
+pub mod drawing;
 pub mod maths;
 pub mod message;
 pub mod renderer;
 pub mod resource;
 pub mod shader;
-pub mod shapes;
 pub mod types;
 pub mod window;
 
@@ -28,6 +29,7 @@ pub struct GraphPunk<'a> {
     windows: HashMap<String, Window<'a>>,
     resources: Resource,
     drawing_objects: Vec<Box<dyn Draw>>,
+    shaders_program: HashMap<String, ShaderProgram>,
     benchmark: BenchmarkManager,
 }
 
@@ -37,6 +39,7 @@ impl<'a> GraphPunk<'a> {
             windows: HashMap::new(),
             resources: Resource::new(),
             drawing_objects: Vec::new(),
+            shaders_program: HashMap::new(),
             benchmark: BenchmarkManager::default(),
         }
     }
@@ -167,6 +170,16 @@ impl<'a> GraphPunk<'a> {
         )
     }
 
+    pub fn set_font_active_glyph(
+        &mut self,
+        unique_id: &str,
+        charactere: char,
+    ) -> Result<(), String> {
+        let window = self.windows.get_mut(unique_id).ok_or("no window found")?;
+
+        window.renderer.font_context.set_active_glyph(charactere)
+    }
+
     pub fn benchmark_print_results(&self) {
         self.benchmark.print_results();
     }
@@ -215,13 +228,21 @@ mod tests {
     }
 
     #[test]
-    fn test_graph_punk_init_basic_resources() {
+    fn test_graph_punk_window_render() -> Result<(), String> {
         let mut graph_punk = GraphPunk::new();
 
         graph_punk
-            .create_window("window_res", "Window", 100, 100)
+            .create_window("window", "Window", 100, 100)
             .unwrap();
 
+        graph_punk.window_set_display_size("window", Vec2 { x: 800, y: 600 })?;
+
         assert!(graph_punk.init_basic_resources().is_ok());
+
+        let message_caller = MessageCaller::default();
+
+        graph_punk.run_window("window", Rc::new(RefCell::new(message_caller)))?;
+
+        Ok(())
     }
 }

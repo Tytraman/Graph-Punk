@@ -7,13 +7,13 @@ use crate::{
         data_object::{AttribPointer, DataObject},
         draw::Draw,
         uniform::Uniform,
+        vbo::VBOType,
         Renderer,
     },
-    resource::Resource,
     shader::program::ShaderProgram,
 };
 
-use std::mem;
+use std::mem::{self, size_of};
 
 #[derive(Clone)]
 pub struct Rectangle {
@@ -22,7 +22,6 @@ pub struct Rectangle {
 
 impl Rectangle {
     pub fn build(
-        resource: &mut Resource,
         shader_program: ShaderProgram,
         color: Vec4<f32>,
         position: Vec3<f32>,
@@ -43,46 +42,36 @@ impl Rectangle {
             offset: 0,
         };
 
-        let mut rect = match DataObject::build(
-            resource,
+        let vertices_size = pixel.len() * size_of::<f32>();
+
+        let mut rect = DataObject::build(
             pixel,
+            vertices_size as isize,
             &vec![attrib_pointer],
             color.clone(),
             position,
             size,
-        ) {
-            Ok(t) => t,
-            Err(err) => return Err(err),
-        };
+            VBOType::StaticDraw,
+        )?;
 
         let uniforms = rect.borrow_mut_uniforms();
 
-        if let Err(err) = shader_program.use_it() {
-            return Err(err);
-        }
+        shader_program.use_it()?;
 
         let color_name = "punk_color";
         let mut color_uniform = Uniform::new();
         let mut model_uniform = Uniform::new();
         let mut projection_uniform = Uniform::new();
 
-        if let Err(err) = color_uniform.search(&shader_program, color_name) {
-            return Err(err);
-        }
+        color_uniform.search(&shader_program, color_name)?;
 
         let punk_model = "punk_model";
-        if let Err(err) = model_uniform.search(&shader_program, punk_model) {
-            return Err(err);
-        }
+        model_uniform.search(&shader_program, punk_model)?;
 
         let punk_projection = "punk_projection";
-        if let Err(err) = projection_uniform.search(&shader_program, punk_projection) {
-            return Err(err);
-        }
+        projection_uniform.search(&shader_program, punk_projection)?;
 
-        if let Err(err) = color_uniform.send_vec4(&color) {
-            return Err(err);
-        }
+        color_uniform.send_vec4(&color)?;
 
         uniforms.insert(color_name.to_string(), color_uniform);
         uniforms.insert(punk_model.to_string(), model_uniform);

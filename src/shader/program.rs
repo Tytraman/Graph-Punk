@@ -4,7 +4,6 @@ use gl::types::GLuint;
 
 use crate::common::PunkString;
 use crate::gl_exec;
-use crate::renderer::{check_errors, clear_errors};
 
 use super::Shader;
 

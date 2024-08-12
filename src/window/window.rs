@@ -7,6 +7,8 @@ use sdl2::{
     EventPump, Sdl,
 };
 
+use crate::maths::mat::Mat4;
+use crate::maths::vec::Vec2;
 use crate::{
     benchmark::BenchmarkManager,
     gl_exec,
@@ -15,8 +17,6 @@ use crate::{
     resource::Resource,
     types::{UserData, RGB},
 };
-use crate::{maths::mat::Mat4, renderer::check_errors};
-use crate::{maths::vec::Vec2, renderer::clear_errors};
 
 use super::user_input::{KeyStatus, Keys};
 
@@ -24,7 +24,7 @@ pub struct Window<'a> {
     sdl: Sdl,
     window: sdl2::video::Window,
     event_pump: EventPump,
-    renderer: Renderer,
+    pub(crate) renderer: Renderer,
     keys: Keys,
     background_color: RGB,
     update_callback: Box<dyn FnMut(&Keys, &mut UserData) + 'a>,
@@ -72,11 +72,12 @@ impl<'a> Window<'a> {
             video_subsystem.gl_get_proc_address(proc_name) as *const std::os::raw::c_void
         });
 
-        let renderer = Renderer::new(gl_context, display_size);
+        let renderer = Renderer::build(gl_context, display_size)?;
         if let Err(err) = renderer.set_viewport_size(width as i32, height as i32) {
             return Err(err);
         }
 
+        // Désactive la VSync.
         unsafe { SDL_GL_SetSwapInterval(0) };
 
         Ok(Window {
